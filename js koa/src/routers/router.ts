@@ -1,13 +1,13 @@
 import Router from "koa-router";
 
 import {
-  // dashboard_route,
   loginRoute,
   registrationRoute,
   productRoute,
-  orders_route,
+  ordersRoute,
   adminDashboard,
-} from "../auth/routes";
+  esewaGateway,
+} from "./routes";
 
 export const Routes = () => {
   const router = new Router();
@@ -15,13 +15,8 @@ export const Routes = () => {
   loginRoute(router);
   registrationRoute(router);
   productRoute(router);
-  orders_route(router);
+  ordersRoute(router);
   adminDashboard(router);
+  esewaGateway(router);
   return router;
-
-  // login_route(router);
-  // registation_route(router);
-  // // dashboard_route(router);
-
-  // // orders_route(router);
 };

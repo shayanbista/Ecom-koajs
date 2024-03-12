@@ -1,5 +1,5 @@
-import { User } from "../entity/User";
-import { AppDataSource } from "../datasource";
+import { User } from "../entities/User";
+import { AppDataSource } from "../dataSource";
 
 export const deleteUser = async (userId: number) => {
   const productRepo = AppDataSource.getRepository(User);

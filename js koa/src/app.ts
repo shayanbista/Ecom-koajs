@@ -7,8 +7,8 @@ import mount from "koa-mount";
 import bodyParser from "koa-bodyparser";
 
 import cors from "@koa/cors";
-import { Routes } from "./routes/router";
-import { db_connection } from "./db_connection";
+import { Routes } from "./routers/router";
+import { db_connection } from "./dbConnection";
 import { token_verification } from "./auth/jwt-verification/token_verification";
 import path, { dirname } from "path";
 

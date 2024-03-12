@@ -1,21 +1,27 @@
+import { string } from "yup";
 import Jwt from "jsonwebtoken";
+import axios from "axios";
 import { In } from "typeorm";
 require("dotenv").config();
 import fs from "fs";
+
 import path from "path";
 import { v4 as uuidv4 } from "uuid";
 import { Context } from "koa";
-import { AppDataSource } from "./../datasource";
-import { User } from "../entity/User";
-import { Product } from "../entity/product";
-import { Order } from "../entity/Order";
-import { userSchema } from "./schema";
-import { ProductImages } from "../entity/ProductImages";
-import { deleteProductImages } from "../service/productImagesService";
-import { deleteUser } from "../service/userService";
-import { deleteProduct } from "../service/productSevice";
-import { base64Conversion } from "../utils";
-import { userRole } from "./jwt-verification/token_verification";
+import { AppDataSource } from "./dataSource";
+import { User } from "./entities/User";
+import { Product } from "./entities/product";
+import { Order } from "./entities/Order";
+import { userSchema } from "./auth/schema";
+import { ProductImages } from "./entities/ProductImages";
+import { deleteProductImage } from "./services/productImagesService";
+import { deleteUser } from "./services/userService";
+import { deleteProduct } from "./services/productSevice";
+import { base64Conversion, base64Decoder, verifySignature } from "./utils";
+import { userRole } from "./auth/jwt-verification/token_verification";
+import { deleteOrder } from "./services/orderService";
+import { Url } from "url";
+import { encode } from "punycode";
 
 export const registration = async (ctx: Context) => {
   let credentials: any = ctx.request.body;
@@ -112,7 +118,7 @@ export const adminDash = async (ctx: Context) => {
 
 export const updateUser = async (ctx: Context) => {
   const credentials: any = ctx.request.body;
-  const id = ctx.params.Id;
+  const id = ctx.params.id;
 
   try {
     const userRepository = AppDataSource.getRepository(User);
@@ -237,8 +243,20 @@ export const storeProduct = async (ctx: Context) => {
   }
 };
 
+export const removeProduct = async (ctx: Context) => {
+  const productId = ctx.params.id;
+  try {
+    deleteProduct(productId);
+    ctx.body = "product deleted successfully";
+    ctx.status = 200;
+  } catch (err) {
+    ctx.status = 500;
+    ctx.body = err;
+  }
+};
+
 export const updateProduct = async (ctx: Context) => {
-  const id = ctx.params.productId;
+  const id = ctx.params.id;
   const credentials: any = ctx.request.body;
   try {
     const productRepository = AppDataSource.getRepository(Product);
@@ -280,20 +298,8 @@ export const updateProduct = async (ctx: Context) => {
   }
 };
 
-export const removeProductImages = async (ctx: Context) => {
-  const id = ctx.params.Id;
-  try {
-    deleteProductImages(id);
-    ctx.body = "productImage deleted successfully";
-    ctx.status = 200;
-  } catch (err) {
-    ctx.status = 500;
-    ctx.body = err;
-  }
-};
-
 export const addProductImages = async (ctx: Context) => {
-  const productId = ctx.params.productId;
+  const productId = ctx.params.id;
   const productImagesRepo = AppDataSource.getRepository(ProductImages);
   console.log(productId);
   const productImageUrl = [
@@ -317,11 +323,11 @@ export const addProductImages = async (ctx: Context) => {
   });
 };
 
-export const removeProduct = async (ctx: Context) => {
-  const id = ctx.params.Id;
+export const removeProductImage = async (ctx: Context) => {
+  const id = ctx.params.id;
   try {
-    deleteProduct(id);
-    ctx.body = "product deleted successfully";
+    deleteProductImage(id);
+    ctx.body = "productImage deleted successfully";
     ctx.status = 200;
   } catch (err) {
     ctx.status = 500;
@@ -329,7 +335,7 @@ export const removeProduct = async (ctx: Context) => {
   }
 };
 
-export const retrieveProducts = async (ctx: Context) => {
+export const getProducts = async (ctx: Context) => {
   const product = AppDataSource.getRepository(Product);
 
   const items = await product.find({
@@ -348,13 +354,11 @@ export const retrieveProducts = async (ctx: Context) => {
   }
 };
 
-export const retrieveSpecificProduct = async (ctx: Context) => {
-  const productId = ctx.params.productId;
+export const getProduct = async (ctx: Context) => {
+  const productId = ctx.params.id;
   console.log(productId);
 
   const productRepo = AppDataSource.getRepository(Product);
-  let frontEndUrl = process.env.FRONT_END_CONNECTION_PORT;
-
   if (!productRepo) {
     ctx.staus = 500;
     return;
@@ -381,17 +385,22 @@ export const retrieveSpecificProduct = async (ctx: Context) => {
       images,
     };
   } catch (err) {
-    console.log(err);
+    ctx.status = 500;
+    ctx.body = err;
   }
 };
 
-export const store_orders = async (ctx: Context) => {
-  const productId: any = ctx.request.body;
-  const userId = ctx.params.userId;
-  const productIds = productId.productId;
-  console.log(userId);
-  console.log(productIds);
+export const storeOrders = async (ctx: Context) => {
+  const orderInfo: any = ctx.request.body;
+  let productIds: (number | string)[] = [];
+  let userId = ctx.params.id;
 
+  const totalAmount = orderInfo.orderInfo.reduce((acc: number, item: any) => {
+    return acc + item.Amount;
+  }, 0);
+  orderInfo.orderInfo.map((id: any) => {
+    productIds.push(id.productId);
+  });
   if (!productIds) {
     ctx.status = 404;
     ctx.meassage = "no product id";
@@ -410,25 +419,12 @@ export const store_orders = async (ctx: Context) => {
     where: { id: In(productIds) },
   });
 
+  console.log(productInfoArray);
+
   if (!userInfo || !productInfoArray) {
     ctx.status = 400;
     return;
   }
-  console.log(userInfo);
-
-  console.log(productInfoArray);
-
-  const amounts = productInfoArray.map((items) => {
-    return items.amount;
-  });
-
-  console.log(amounts);
-
-  let totalAmount = amounts.reduce((accumulator, currentAmount) => {
-    return accumulator + currentAmount;
-  }, 0);
-  console.log(totalAmount);
-
   try {
     const order = new Order();
     order.user = userInfo;
@@ -446,11 +442,10 @@ export const store_orders = async (ctx: Context) => {
   }
 };
 
-export const retrieve_orders = async (ctx: Context) => {
-  const userId = parseInt(ctx.params.userId);
+export const getOrders = async (ctx: Context) => {
+  const userId = parseInt(ctx.params.id);
   const orderId: any = ctx.request.body;
-  const orderIds = orderId.orderId;
-  console.log(orderIds);
+  const orderIds = orderId.orderid;
 
   if (
     isNaN(userId) ||
@@ -498,5 +493,27 @@ export const retrieve_orders = async (ctx: Context) => {
       ctx.body = items;
       console.log(items);
     });
+  }
+};
+
+export const removeOrder = async (ctx: Context) => {
+  let orderId = ctx.params.id;
+
+  try {
+    deleteOrder(orderId);
+    ctx.status = 200;
+    ctx.body = "order deleted successfully";
+  } catch (err) {
+    ctx.body = err;
+    ctx.status = 500;
+  }
+};
+
+export const verifyEsewa = async (ctx: Context) => {
+  const result = verifySignature();
+
+  if (result?.status && result?.message) {
+    ctx.body = result?.message;
+    ctx.status = result.status;
   }
 };

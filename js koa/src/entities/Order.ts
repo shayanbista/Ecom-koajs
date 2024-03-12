@@ -21,6 +21,9 @@ export class Order {
   @Column({ type: "decimal", precision: 10, scale: 2, nullable: true })
   totalAmount: number;
 
+  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true })
+  quantity: number;
+
   @ManyToOne(() => User, (user) => user.orders)
   user: User;
 

@@ -9,7 +9,7 @@ export const AppDataSource = new DataSource({
   database: "postgres",
   // logging: true,
   synchronize: true,
-  entities: ["src/entity/**/*.ts"],
+  entities: ["src/entities/**/*.ts"],
   subscribers: [],
   migrations: ["./src/migration/**/*.ts"],
   migrationsRun: true,
